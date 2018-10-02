@@ -3,36 +3,44 @@ package main
 
 import (
 	"archive/zip"
-	"crypto/rand"
-	"crypto/rsa"
+	//	"crypto/rand"
+	//"crypto/rsa"
 
-	"crypto/sha256"
+	//"crypto/sha256"
 
 	//"crypto/tls"
-	//"crypto/x509"
-	//"encoding/pem"
-	"crypto"
-	"fmt"
+	"crypto/x509"
+	"encoding/pem"
 
-	//"errors"
+	//"crypto"
+	"errors"
 	"flag"
+
+	//"fmt"
+	"encoding/xml"
 	"io/ioutil"
 	"log"
 	"os"
+	"pkcs7"
 	"strings"
 )
+
+type File struct {
+	Name string `xml:"name"`
+	Size int64  `xml:"size`
+}
 
 var Path string
 var Output string
 var Mode string
-var List []string
+var List []File
 var Hash string
 
 //var FileNames string
 
 func init() {
 	flag.StringVar(&Path, "path", "", "Here you should place Path")
-	flag.StringVar(&Output, "out", "done.zip", "Here you should place Name of your zip")
+	flag.StringVar(&Output, "out", "out.zip", "Here you should place Name of your zip")
 	flag.StringVar(&Mode, "mode", "z", "Here you should place z - to zip, sz - to sertificate zip, u - to unzip")
 	flag.StringVar(&Hash, "hash", "", "Here you should place hash")
 }
@@ -59,10 +67,13 @@ func main() {
 		}
 		log.Println("Zipped File: " + output)
 		p := Path + "\\"
-		for _, file := range List {
-			file = strings.Replace(file, p, "", -1)
-			log.Printf(file)
+		for i, file := range List {
+			//file.cngName(p)
+			List[i].cngName(p)
+			//file.Name = strings.Replace(file.Name, p, "", -1)
+			log.Printf(file.Name)
 		}
+		CreateMeta(List)
 	case "s":
 		RAS("my.crt", "my.key")
 	case "i":
@@ -70,6 +81,30 @@ func main() {
 	default:
 		log.Fatal("Unknown code for mode")
 	}
+}
+
+func (f *File) cngName(path string) {
+	f.Name = strings.Replace(f.Name, path, "", -1)
+}
+
+func CreateMeta(list []File) error {
+	f, err := os.Create("meta.xml")
+	if err != nil {
+		log.Printf("error: %v\n", err)
+		return err
+	}
+	defer f.Close()
+
+	//v := &File{Name: "readme.txt", Size: 10}
+
+	output, err := xml.MarshalIndent(list, "  ", "    ")
+	if err != nil {
+		log.Printf("error: %v\n", err)
+		return err
+	}
+
+	f.Write(output)
+	return nil
 }
 
 /*func Verify(publicKey string, signature string) error {
@@ -92,7 +127,70 @@ func main() {
 
 func RAS(certFile, keyFile string) error {
 	data, err := ioutil.ReadFile(Output)
-	myPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	log.Printf("hello1")
+	if err != nil {
+		log.Printf("hello")
+		return err
+	}
+	cert, err := ioutil.ReadFile(certFile)
+	if err != nil {
+		log.Printf("hello21")
+		return err
+	}
+	log.Printf("hello2")
+	key, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return err
+	}
+
+	block, _ := pem.Decode([]byte(cert))
+	if block == nil {
+		log.Printf("failed to parse PEM block containing the public key")
+		return errors.New("Bad cert")
+	}
+
+	/*pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		log.Printf("failed to parse x509")
+		return err
+	}*/
+	log.Printf("hello7")
+	certif, err := x509.ParseCertificate([]byte(key))
+	if err != nil {
+		log.Printf(err.Error())
+		return err
+	}
+	log.Printf("hello5")
+	prv, err := x509.ParsePKCS1PrivateKey(key)
+	if err != nil {
+		return err
+	}
+	signedData, err := pkcs7.NewSignedData([]byte(data))
+	if err != nil {
+		log.Printf("Cannot initialize signed data: %s", err)
+		return err
+	}
+	if err := signedData.AddSigner(certif, prv, pkcs7.SignerInfoConfig{}); err != nil {
+		log.Printf("Cannot add signer: %s", err)
+		return err
+	}
+
+	signedData.Detach()
+
+	detachedSignature, err := signedData.Finish()
+	if err != nil {
+		log.Printf("Cannot finish signing data: %s", err)
+		return err
+	}
+	sdata := pem.EncodeToMemory(&pem.Block{Type: "PKCS7", Bytes: detachedSignature})
+	sz, err := os.Create("szip.szp")
+	defer sz.Close()
+	if err != nil {
+		return err
+	}
+	sz.Write(sdata)
+
+	/*myPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 
 	if err != nil {
 		fmt.Println(err.Error)
@@ -131,8 +229,8 @@ func RAS(certFile, keyFile string) error {
 	if err != nil {
 		return err
 	}
-
-	newFile.Write([]byte(signature))
+	*/
+	/*newFile.Write([]byte(signature))
 	if err != nil {
 		return err
 	}
@@ -143,7 +241,7 @@ func RAS(certFile, keyFile string) error {
 	newFile.Write(data)
 	if err != nil {
 		return err
-	}
+	}*/
 	return nil
 }
 
@@ -152,6 +250,7 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 	if err != nil {
 		return err
 	}
+	L := new(File)
 	// Add files to zip
 	for _, file := range files {
 		log.Printf(file.Name(), file.IsDir())
@@ -162,7 +261,9 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 			}
 			ZipFiles(path+"\\"+file.Name(), zipWriter, dirName+file.Name()+"\\")
 		} else {
-			List = append(List, path+"\\"+file.Name())
+			L.Name = path + "\\" + file.Name()
+			L.Size = file.Size()
+			List = append(List, *L)
 			writer, err := zipWriter.Create(dirName + file.Name())
 			if err != nil {
 				return err
