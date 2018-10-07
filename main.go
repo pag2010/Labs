@@ -6,6 +6,7 @@ import (
 	//	"crypto/rand"
 	"bytes"
 	"crypto/rsa"
+	"path/filepath"
 
 	//"crypto/sha256"
 	//"crypto/tls"
@@ -15,7 +16,7 @@ import (
 	"encoding/pem"
 
 	//"crypto"
-	//"errors"
+	"errors"
 	"flag"
 
 	"crypto/sha1"
@@ -29,32 +30,34 @@ import (
 	"log"
 	"os"
 	"pkcs7"
-	"strings"
+
+	//"strings"
 	"time"
 )
 
-type File struct {
+type sFile struct {
 	Name   string    `xml: "name"`
 	Size   int64     `xml: "size"`
 	CSize  int64     `xml: "compressed_size"`
 	Modify time.Time `xml: "modify"`
 	Hash   string    `xml: "hash"`
 }
+type meta struct {
+	File []sFile `xml: "file"`
+}
 
 var Path string
 var Output string
 var Mode string
-var List []File
+var List []sFile
 var Hash string
 var CertName string
 var KeyName string
 
-//var FileNames string
-
 func init() {
 	flag.StringVar(&Path, "path", "./", "Here you should place Path")
 	flag.StringVar(&Output, "out", "out.zip", "Here you should place Name of your zip")
-	flag.StringVar(&Mode, "mode", "z", "Here you should place z - to zip, sz - to sertificate zip, u - to unzip")
+	flag.StringVar(&Mode, "mode", "", "Here you should place z - to zip, sz - to sertificate zip, u - to unzip")
 	flag.StringVar(&Hash, "hash", "", "Here you should place hash")
 	flag.StringVar(&CertName, "cert", "./", "Here you should place path to certificate")
 	flag.StringVar(&KeyName, "pkey", "./", "Here you should place path to private key")
@@ -62,90 +65,89 @@ func init() {
 
 func main() {
 	flag.Parse()
-	//log.Printf(Path)
-	//output := Output
 
 	switch Mode {
 	case "z":
-		/*newZipFile, err := os.Create(output) //создается zip архив
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer newZipFile.Close()*/
 
 		newZipFile := new(bytes.Buffer)
 		ZipWriter := zip.NewWriter(newZipFile) //создается записыватель в zip
-		//err = ZipWriter.Close()
 
 		err := ZipFiles(Path, ZipWriter, "")
 		err = ZipWriter.Close()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf(err.Error())
+			return
 		}
-		z, err := os.Create("Zip.zip")
-		defer z.Close()
-		z.Write(newZipFile.Bytes())
+
 		log.Println("Files were zipped")
 		p := Path + "\\"
 		for i, file := range List {
-			//file.cngName(p)
-			List[i].cngName(p)
-			//file.Name = strings.Replace(file.Name, p, "", -1)
-			log.Printf(file.Name)
+
+			err := List[i].cngName(p)
+
+			if err != nil {
+				log.Printf(err.Error())
+				return
+			} else {
+				log.Printf(file.Name)
+			}
 		}
 		ZipMetaFile, err := CreateMeta(List, newZipFile)
-		m, err := os.Create("Meta.zip")
-		defer m.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-		m.Write(ZipMetaFile.Bytes())
+
 		EndZip := new(bytes.Buffer)
 		bs := make([]byte, 4)
 		binary.LittleEndian.PutUint32(bs, uint32(ZipMetaFile.Len()))
+
 		EndZip.Write(bs)
 		EndZip.Write(ZipMetaFile.Bytes())
 		EndZip.Write(newZipFile.Bytes())
-		//err = SignZip("my.crt", "my.key", Output, EndZip)
+
 		err = SignZip(CertName, KeyName, Output, EndZip)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf(err.Error())
+			return
 		}
 
 	case "x":
+		err := Extract()
+		if err != nil {
+			log.Printf(err.Error())
+			return
+		}
 
 	case "i":
 		err := Verify(CertName)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf(err.Error())
+			return
 		}
 
 	default:
-		log.Fatal("Unknown code for mode")
+		log.Printf("Unknown key for mode")
+		return
 	}
 }
 
-func (f *File) cngName(path string) {
-	f.Name = strings.Replace(f.Name, path, "", -1)
+//метод нужен для удаления из полного имени файла ненужной части пути,
+//например у имени: "С:\Sasha\dirToZip\Laba.go" часть "С:\Sasha\" не нужна после создания архива
+func (f *sFile) cngName(path string) error {
+	var err error
+	f.Name, err = filepath.Rel(path, f.Name)
+	return err
 }
 
-func CreateMeta(list []File, zipFile *bytes.Buffer) (*bytes.Buffer, error) {
-	/*f, err := os.Create("meta.xml")
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	defer f.Close()*/
+func CreateMeta(list []sFile, zipFile *bytes.Buffer) (*bytes.Buffer, error) {
 
-	f := new(bytes.Buffer)
-	output, err := xml.MarshalIndent(list, "  ", "    ")
+	var l meta
+	l.File = list
+	output, err := xml.MarshalIndent(l, "  ", "    ")
 	if err != nil {
 		log.Printf("error: %v\n", err)
 		return nil, err
 	}
 	MetaBuf := new(bytes.Buffer)
 	zipMetaWriter := zip.NewWriter(MetaBuf)
-	//defer zipMetaWriter.Close()
+
 	m, err := zipMetaWriter.Create("meta.xml")
 	if err != nil {
 		return nil, err
@@ -156,19 +158,7 @@ func CreateMeta(list []File, zipFile *bytes.Buffer) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	f.Write(MetaBuf.Bytes())
-	/*zipFile = f
-	s, err := os.Create("meta.zip")
-	s.Write(f.Bytes())
-	defer s.Close()*/
-	/*err = zipMetaWriter.Close()
-	if err != nil {
-		log.Fatal(err)
-	}*/
-
-	//f.Write(MetaBuf.Bytes())
-	//f.Write(zipFile.Bytes())
-	return f, nil
+	return MetaBuf, nil
 }
 
 func Verify(cert string) error {
@@ -185,8 +175,9 @@ func Verify(cert string) error {
 	err = sign.Verify()
 	if err != nil {
 		log.Printf("Sign is not verified")
+		return err
 	}
-	fmt.Println((sign.Certificates[0].Issuer.CommonName))
+	fmt.Println("Sign was made by " + sign.Certificates[0].Issuer.CommonName)
 	return nil
 }
 
@@ -206,11 +197,13 @@ func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) erro
 
 	certBlock, _ := pem.Decode(certFile)
 	if certBlock == nil {
-		panic("failed to parse certificate PEM")
+		log.Printf("failed to parse certificate PEM")
+		return errors.New("failed to parse certificate PEM")
 	}
 	recpcert, err := x509.ParseCertificate(certBlock.Bytes)
 	if err != nil {
-		panic("failed to parse certificate: " + err.Error())
+		log.Printf("failed to parse certificate: " + err.Error())
+		return err
 	}
 	pkeyFile, err := ioutil.ReadFile(key)
 	if err != nil {
@@ -218,6 +211,10 @@ func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) erro
 		return err
 	}
 	block, _ := pem.Decode(pkeyFile)
+	if block == nil {
+		log.Printf("failed to parse private key PEM")
+		return errors.New("failed to parse private key PEM")
+	}
 	parseResult, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	var recpkey *rsa.PrivateKey
 	recpkey = parseResult.(*rsa.PrivateKey)
@@ -235,11 +232,12 @@ func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) erro
 	}
 
 	sz, err := os.Create(Output)
+	defer sz.Close()
 	if err != nil {
 		log.Printf("error")
 		return err
 	}
-	defer sz.Close()
+
 	/*data, err := ioutil.ReadFile(Output)
 	if err != nil {
 		log.Printf("error")
@@ -257,7 +255,7 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 	if err != nil {
 		return err
 	}
-	L := new(File)
+	L := new(sFile)
 	// Add files to zip
 	for _, file := range files {
 		//log.Printf(file.Name(), file.IsDir())
@@ -326,6 +324,119 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 }
 
 func Extract() error {
+	err := Verify(CertName)
+	data, err := ioutil.ReadFile(Output)
+	if err != nil {
+		log.Printf("unable to read szp")
+		return err
+	}
+
+	sign, err := pkcs7.Parse(data)
+	if err != nil {
+		log.Printf("Sign is broken!")
+		return err
+	}
+
+	data = sign.Content //получаю содержимое архива без подписи
+
+	mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
+
+	bmeta := data[4 : mlen+4]            //получаю байты метаданных
+	zmeta, err := os.Create("umeta.zip") //создаю архив только метаданных
+	defer zmeta.Close()
+	zmeta.Write(bmeta)
+
+	dzip := data[mlen+4:] // считываю остальную часть архива с файлами
+	zm, err := os.Create("uzip.zip")
+	defer zm.Close()
+	zm.Write(dzip) //записываю их в файл для разорхивации
+	if err != nil {
+		log.Printf("unable to read meta lenght")
+		return err
+	}
+
+	m, err := zip.OpenReader("umeta.zip")
+	if err != nil {
+		log.Printf("Can not open meta")
+		return err
+	}
+
+	f := m.File[0] //т.к. в архиве меты всего 1 файл, получаю его
+	buf := new(bytes.Buffer)
+
+	st, err := f.Open()
+	if err != nil {
+		log.Printf(err.Error())
+		return err
+	}
+	_, err = io.Copy(buf, st)
+	if err != nil {
+		log.Printf(err.Error())
+		return err
+	}
+
+	xmlMeta := new(meta)
+
+	err = xml.Unmarshal(buf.Bytes(), xmlMeta)
+	if err != nil {
+		log.Printf(err.Error())
+		return err
+	}
+
+	r, err := zip.OpenReader("uzip.zip")
+	if err != nil {
+		log.Printf("Can not open zip")
+		return err
+	}
+	defer r.Close()
+
+	var fm os.FileMode //создаю папку для извлечения
+	err = os.Mkdir("extract", fm)
+	p := "./extract"
+
+	i := 0 //счетчик для метаданных
+	for _, f := range r.File {
+		if f.FileHeader.ExternalAttrs == 0 { //Если папка, то равно 0, если файл, то не равно 0
+			err = os.Mkdir(p+"//"+f.Name, fm)
+			if err != nil {
+				log.Printf("Dir exists already " + f.Name)
+			}
+
+		} else {
+			rc, err := f.Open()
+			defer rc.Close()
+			if err != nil {
+				log.Printf(err.Error())
+			}
+
+			file, err := os.Create(p + "//" + f.Name)
+			if err != nil {
+				log.Printf(err.Error())
+			}
+			defer file.Close()
+			//log.Printf("lol")
+
+			_, err = io.Copy(file, rc)
+			if err != nil {
+				log.Printf(err.Error())
+			}
+
+			//вычисляю хэш
+			h := sha1.New()
+			fileHash, err := ioutil.ReadFile(p + "//" + f.Name)
+			h.Write(fileHash)
+			hash := base64.URLEncoding.EncodeToString(h.Sum(nil))
+
+			if hash == xmlMeta.File[i].Hash {
+				fmt.Printf(f.Name + " hashes are equal\n")
+			} else {
+				fmt.Printf(f.Name + " hash is broken!\n")
+			}
+
+			i++
+		}
+
+	}
 
 	return nil
 }
