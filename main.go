@@ -344,21 +344,22 @@ func Extract() error {
 
 	mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
 
-	bmeta := data[4 : mlen+4]            //получаю байты метаданных
-	zmeta, err := os.Create("umeta.zip") //создаю архив только метаданных
+	bmeta := data[4 : mlen+4] //получаю байты метаданных
+	/*zmeta, err := os.Create("umeta.zip") //создаю архив только метаданных
 	defer zmeta.Close()
-	zmeta.Write(bmeta)
+	zmeta.Write(bmeta)*/
 
 	dzip := data[mlen+4:] // считываю остальную часть архива с файлами
-	zm, err := os.Create("uzip.zip")
+	/*zm, err := os.Create("uzip.zip")
 	defer zm.Close()
 	zm.Write(dzip) //записываю их в файл для разорхивации
 	if err != nil {
 		log.Printf("unable to read meta lenght")
 		return err
-	}
+	}*/
 
-	m, err := zip.OpenReader("umeta.zip")
+	//m, err := zip.OpenReader("umeta.zip")
+	m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
 	if err != nil {
 		log.Printf("Can not open meta")
 		return err
@@ -386,12 +387,13 @@ func Extract() error {
 		return err
 	}
 
-	r, err := zip.OpenReader("uzip.zip")
+	//r, err := zip.OpenReader("uzip.zip")
+	r, err := zip.NewReader(bytes.NewReader(dzip), int64(len(dzip)))
 	if err != nil {
 		log.Printf("Can not open zip")
 		return err
 	}
-	defer r.Close()
+	//defer r.Close()
 
 	var fm os.FileMode //создаю папку для извлечения
 	err = os.Mkdir("extract", fm)
