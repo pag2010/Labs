@@ -260,7 +260,7 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 	for _, file := range files {
 		//log.Printf(file.Name(), file.IsDir())
 		if file.IsDir() {
-			_, err := zipWriter.Create(filepath.Join(dirName, file.Name()) + "\\")
+			_, err := zipWriter.Create(filepath.Join(dirName, file.Name()) + "/")
 			if err != nil {
 				return err
 			}
