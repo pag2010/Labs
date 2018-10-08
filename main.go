@@ -426,12 +426,14 @@ func Extract() error {
 	//defer r.Close()
 
 	var fm os.FileMode //создаю папку для извлечения
+	err = os.RemoveAll("extract")
+	if err != nil {
+		log.Printf("dir extract wass made")
+	}
 	err = os.Mkdir("extract", fm)
 	p := "./extract"
-
 	i := 0 //счетчик для метаданных
 	for _, f := range r.File {
-
 		dirs, _ := filepath.Split(f.Name)
 
 		if f.ExternalAttrs == 0 { //Если папка, то равно 0, если файл, то не равно 0
