@@ -31,7 +31,7 @@ import (
 	"os"
 	"pkcs7"
 
-	//"strings"
+	"strings"
 	"time"
 )
 
@@ -79,17 +79,17 @@ func main() {
 			return
 		}
 
-		log.Println("Files were zipped")
-		p := Path + "\\"
+		fmt.Println("Files were zipped")
+		//p := Path + "\\"
 		for i, file := range List {
 
-			err := List[i].cngName(p)
+			err := List[i].cngName(Path)
 
 			if err != nil {
 				log.Printf(err.Error())
 				return
 			} else {
-				log.Printf(file.Name)
+				fmt.Println(file.Name)
 			}
 		}
 		ZipMetaFile, err := CreateMeta(List, newZipFile)
@@ -116,11 +116,52 @@ func main() {
 		}
 
 	case "i":
-		err := Verify(CertName)
+		/*data, err := ioutil.ReadFile(Output)
+		if err != nil {
+			log.Printf("unable to read szp")
+			return
+		}*/
+		sign, err := Verify(CertName)
+		if err != nil {
+			log.Printf(err.Error())
+			return
+		} else {
+			fmt.Println("Sign is verified")
+		}
+		if Hash != "" {
+			signer := sign.GetOnlySigner()
+			if Hash == strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(signer.Raw))) {
+				fmt.Println("Hashes are equal!")
+			} else {
+				fmt.Println("Hashes are not equal! Sing is broken")
+			}
+		}
+		data := sign.Content
+		mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
+
+		bmeta := data[4 : mlen+4] //получаю байты метаданных
+
+		m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
+		if err != nil {
+			log.Printf("Can not open meta")
+			return
+		}
+
+		f := m.File[0] //т.к. в архиве меты всего 1 файл, получаю его
+		buf := new(bytes.Buffer)
+
+		st, err := f.Open()
 		if err != nil {
 			log.Printf(err.Error())
 			return
 		}
+		_, err = io.Copy(buf, st)
+		if err != nil {
+			log.Printf(err.Error())
+			return
+		}
+
+		fmt.Printf(string(buf.Bytes()))
 
 	default:
 		log.Printf("Unknown key for mode")
@@ -161,24 +202,24 @@ func CreateMeta(list []sFile, zipFile *bytes.Buffer) (*bytes.Buffer, error) {
 	return MetaBuf, nil
 }
 
-func Verify(cert string) error {
+func Verify(cert string) (sign *pkcs7.PKCS7, err error) {
 	szip, err := ioutil.ReadFile(Output)
 	if err != nil {
 		log.Printf("Unable to read zip")
-		return err
+		return nil, err
 	}
-	sign, err := pkcs7.Parse(szip)
+	sign, err = pkcs7.Parse(szip)
 	if err != nil {
 		log.Printf("Sign is broken!")
-		return err
+		return sign, err
 	}
 	err = sign.Verify()
 	if err != nil {
 		log.Printf("Sign is not verified")
-		return err
+		return sign, err
 	}
-	fmt.Println("Sign was made by " + sign.Certificates[0].Issuer.CommonName)
-	return nil
+	//fmt.Println("Sign was made by " + sign.Certificates[0].Issuer.CommonName)
+	return sign, nil
 }
 
 func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) error {
@@ -238,14 +279,10 @@ func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) erro
 		return err
 	}
 
-	/*data, err := ioutil.ReadFile(Output)
-	if err != nil {
-		log.Printf("error")
-		return err
-	}*/
+	fmt.Println("Hash of cert: " + strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(recpcert.Raw))))
+
 	sz.Write(detachedSignature)
-	//data = data
-	log.Print("Data signed")
+	fmt.Println("Data signed")
 	return nil
 }
 
@@ -327,38 +364,31 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 }
 
 func Extract() error {
-	err := Verify(CertName)
+	sign, err := Verify(CertName)
 	data, err := ioutil.ReadFile(Output)
 	if err != nil {
 		log.Printf("unable to read szp")
 		return err
 	}
-
-	sign, err := pkcs7.Parse(data)
-	if err != nil {
-		log.Printf("Sign is broken!")
-		return err
+	signer := sign.GetOnlySigner()
+	if Hash != "" {
+		if Hash == strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(signer.Raw))) {
+			fmt.Println("Hashes are equal!")
+		} else {
+			fmt.Println("Hashes are not equal! Sing is broken")
+		}
+	} else {
+		fmt.Println("Hash of sign: " + strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(signer.Raw))))
 	}
-
-	data = sign.Content //получаю содержимое архива без подписи
+	data = sign.Content
+	//fmt.Println("Hash of sign: " + strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(signer.Raw))))
 
 	mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
 
 	bmeta := data[4 : mlen+4] //получаю байты метаданных
-	/*zmeta, err := os.Create("umeta.zip") //создаю архив только метаданных
-	defer zmeta.Close()
-	zmeta.Write(bmeta)*/
 
 	dzip := data[mlen+4:] // считываю остальную часть архива с файлами
-	/*zm, err := os.Create("uzip.zip")
-	defer zm.Close()
-	zm.Write(dzip) //записываю их в файл для разорхивации
-	if err != nil {
-		log.Printf("unable to read meta lenght")
-		return err
-	}*/
 
-	//m, err := zip.OpenReader("umeta.zip")
 	m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
 	if err != nil {
 		log.Printf("Can not open meta")
@@ -403,33 +433,28 @@ func Extract() error {
 	for _, f := range r.File {
 
 		dirs, _ := filepath.Split(f.Name)
-		//CrtDir(p, dirs)
-		//log.Print(f.Name, " ", f.ExternalAttrs)
+
 		if f.ExternalAttrs == 0 { //Если папка, то равно 0, если файл, то не равно 0
-			//err = os.Mkdir(p+"//"+f.Name, fm)
+
 			err = os.Mkdir(filepath.Join(p, dirs), fm)
-			//log.Printf(dirs)
+
 			if err != nil {
-				//log.Printf("Dir exists already " + dirs)
+				log.Printf(err.Error())
 			}
 
 		} else {
 
-			//CrtDir(p, f.Name, fm)
 			rc, err := f.Open()
 			defer rc.Close()
 			if err != nil {
 				log.Printf(err.Error())
 			}
 
-			//file, err := os.Create(p + "//" + f.Name)
 			file, err := os.Create(filepath.Join(p, f.Name))
-			//log.Printf(filepath.Join(p, f.Name))
 			if err != nil {
 				log.Printf(err.Error())
 			}
 			defer file.Close()
-			//log.Printf("lol")
 
 			_, err = io.Copy(file, rc)
 			if err != nil {
