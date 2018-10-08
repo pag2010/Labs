@@ -260,18 +260,21 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 	for _, file := range files {
 		//log.Printf(file.Name(), file.IsDir())
 		if file.IsDir() {
-			_, err := zipWriter.Create(dirName + file.Name() + "\\")
+			_, err := zipWriter.Create(filepath.Join(dirName, file.Name()) + "\\")
 			if err != nil {
 				return err
 			}
-			ZipFiles(path+"\\"+file.Name(), zipWriter, dirName+file.Name()+"\\")
+			/*			log.Printf(filepath.Join(dirName, file.Name()))*/
+			//ZipFiles(path+"\\"+file.Name(), zipWriter, dirName+file.Name()+"\\")
+			ZipFiles(filepath.Join(path, file.Name()), zipWriter, filepath.Join(dirName, file.Name()))
 		} else {
 
-			if err != nil {
+			/*if err != nil {
 				return err
 			}
-			//log.Printf(path + "\\" + file.Name())
-			data, err := os.Open(path + "\\" + file.Name())
+			log.Printf(filepath.Join(path, file.Name()))*/
+			//data, err := os.Open(path + "\\" + file.Name())
+			data, err := os.Open(filepath.Join(path, file.Name()))
 			defer data.Close()
 			if err != nil {
 				return err
@@ -288,7 +291,7 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 				return err
 			}
 
-			header.Name = dirName + file.Name()
+			header.Name = filepath.Join(dirName, file.Name())
 
 			header.Method = zip.Deflate
 
@@ -300,7 +303,7 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 				return err
 
 			}
-			L.Name = path + "\\" + file.Name()
+			L.Name = filepath.Join(path, file.Name())
 			L.Size = file.Size()
 			L.CSize = int64(header.CompressedSize64)
 			L.Modify = header.Modified
@@ -396,20 +399,30 @@ func Extract() error {
 
 	i := 0 //счетчик для метаданных
 	for _, f := range r.File {
-		if f.FileHeader.ExternalAttrs == 0 { //Если папка, то равно 0, если файл, то не равно 0
-			err = os.Mkdir(p+"//"+f.Name, fm)
+
+		dirs, _ := filepath.Split(f.Name)
+		//CrtDir(p, dirs)
+		//log.Print(f.Name, " ", f.ExternalAttrs)
+		if f.ExternalAttrs == 0 { //Если папка, то равно 0, если файл, то не равно 0
+			//err = os.Mkdir(p+"//"+f.Name, fm)
+			err = os.Mkdir(filepath.Join(p, dirs), fm)
+			//log.Printf(dirs)
 			if err != nil {
-				log.Printf("Dir exists already " + f.Name)
+				//log.Printf("Dir exists already " + dirs)
 			}
 
 		} else {
+
+			//CrtDir(p, f.Name, fm)
 			rc, err := f.Open()
 			defer rc.Close()
 			if err != nil {
 				log.Printf(err.Error())
 			}
 
-			file, err := os.Create(p + "//" + f.Name)
+			//file, err := os.Create(p + "//" + f.Name)
+			file, err := os.Create(filepath.Join(p, f.Name))
+			//log.Printf(filepath.Join(p, f.Name))
 			if err != nil {
 				log.Printf(err.Error())
 			}
@@ -423,7 +436,7 @@ func Extract() error {
 
 			//вычисляю хэш
 			h := sha1.New()
-			fileHash, err := ioutil.ReadFile(p + "//" + f.Name)
+			fileHash, err := ioutil.ReadFile(filepath.Join(p, f.Name))
 			h.Write(fileHash)
 			hash := base64.URLEncoding.EncodeToString(h.Sum(nil))
 
@@ -435,8 +448,6 @@ func Extract() error {
 
 			i++
 		}
-
 	}
-
 	return nil
 }
