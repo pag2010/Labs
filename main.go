@@ -36,14 +36,14 @@ import (
 )
 
 type sFile struct {
-	Name   string    `xml: "name"`
-	Size   int64     `xml: "size"`
-	CSize  int64     `xml: "compressed_size"`
-	Modify time.Time `xml: "modify"`
-	Hash   string    `xml: "hash"`
+	Name   string    `xml:"name"`
+	Size   int64     `xml:"size"`
+	CSize  int64     `xml:"compressed_size"`
+	Modify time.Time `xml:"modify"`
+	Hash   string    `xml:"hash"`
 }
 type meta struct {
-	File []sFile `xml: "file"`
+	File []sFile `xml:"file"`
 }
 
 var Path string
@@ -116,12 +116,7 @@ func main() {
 		}
 
 	case "i":
-		/*data, err := ioutil.ReadFile(Output)
-		if err != nil {
-			log.Printf("unable to read szp")
-			return
-		}*/
-		sign, err := Verify(CertName)
+		sign, err := Verify()
 		if err != nil {
 			log.Printf(err.Error())
 			return
@@ -202,7 +197,7 @@ func CreateMeta(list []sFile, zipFile *bytes.Buffer) (*bytes.Buffer, error) {
 	return MetaBuf, nil
 }
 
-func Verify(cert string) (sign *pkcs7.PKCS7, err error) {
+func Verify() (sign *pkcs7.PKCS7, err error) {
 	szip, err := ioutil.ReadFile(Output)
 	if err != nil {
 		log.Printf("Unable to read zip")
@@ -235,7 +230,10 @@ func SignZip(cert string, key string, Output string, zipFile *bytes.Buffer) erro
 		return err
 	}
 	certFile, err := ioutil.ReadFile(cert)
-
+	if err != nil {
+		log.Printf("failed to read certificate")
+		return errors.New("failed to parse certificate from file")
+	}
 	certBlock, _ := pem.Decode(certFile)
 	if certBlock == nil {
 		log.Printf("failed to parse certificate PEM")
@@ -364,7 +362,12 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 }
 
 func Extract() error {
-	sign, err := Verify(CertName)
+	sign, err := Verify()
+	if err != nil {
+		log.Printf("Sign was not verified")
+		return err
+	}
+	fmt.Println("Sign was verified")
 	data, err := ioutil.ReadFile(Output)
 	if err != nil {
 		log.Printf("unable to read szp")
@@ -425,12 +428,12 @@ func Extract() error {
 	}
 	//defer r.Close()
 
-	var fm os.FileMode //создаю папку для извлечения
+	var fm os.FileMode
 	err = os.RemoveAll("extract")
 	if err != nil {
-		log.Printf("dir extract wass made")
+		log.Printf("dir extract was made")
 	}
-	err = os.Mkdir("extract", fm)
+	err = os.Mkdir("extract", fm) //создаю папку для извлечения
 	p := "./extract"
 	i := 0 //счетчик для метаданных
 	for _, f := range r.File {
