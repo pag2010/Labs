@@ -30,8 +30,9 @@ import (
 	"log"
 	"os"
 	"pkcs7"
-
 	"strings"
+
+	//"testing"
 	"time"
 )
 
@@ -291,25 +292,19 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 	if err != nil {
 		return err
 	}
-	L := new(sFile)
-	// Add files to zip
+	//L := new(sFile)
 	for _, file := range files {
-		//log.Printf(file.Name(), file.IsDir())
 		if file.IsDir() {
 			_, err := zipWriter.Create(filepath.Join(dirName, file.Name()) + "/")
 			if err != nil {
 				return err
 			}
-			/*			log.Printf(filepath.Join(dirName, file.Name()))*/
-			//ZipFiles(path+"\\"+file.Name(), zipWriter, dirName+file.Name()+"\\")
-			ZipFiles(filepath.Join(path, file.Name()), zipWriter, filepath.Join(dirName, file.Name()))
-		} else {
-
-			/*if err != nil {
+			err = ZipFiles(filepath.Join(path, file.Name()), zipWriter, filepath.Join(dirName, file.Name()))
+			if err != nil {
 				return err
 			}
-			log.Printf(filepath.Join(path, file.Name()))*/
-			//data, err := os.Open(path + "\\" + file.Name())
+		} else {
+			L := new(sFile)
 			data, err := os.Open(filepath.Join(path, file.Name()))
 			defer data.Close()
 			if err != nil {
@@ -355,10 +350,6 @@ func ZipFiles(path string, zipWriter *zip.Writer, dirName string) error {
 
 		}
 	}
-	/*err = SignZip("my.crt", "my.key", Output, zipFile)
-	if err != nil {
-		return err
-	}*/
 	return nil
 }
 
@@ -435,6 +426,10 @@ func Extract() error {
 		log.Printf("dir extract was made")
 	}
 	err = os.Mkdir("extract", fm) //создаю папку для извлечения
+	if err != nil {
+		log.Printf("can not create dir")
+		return err
+	}
 	p := "./extract"
 	i := 0 //счетчик для метаданных
 	for _, f := range r.File {
