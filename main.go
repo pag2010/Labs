@@ -132,7 +132,7 @@ func main() {
 			}
 		}
 		data := sign.Content
-		mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
+		/*mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
 
 		bmeta := data[4 : mlen+4] //получаю байты метаданных
 
@@ -154,8 +154,9 @@ func main() {
 		if err != nil {
 			log.Printf(err.Error())
 			return
-		}
-
+		}*/
+		buf, mlen, err := ReadMeta(data)
+		mlen = mlen
 		fmt.Printf(string(buf.Bytes()))
 
 	default:
@@ -386,13 +387,13 @@ func Extract() error {
 	data = sign.Content
 	//fmt.Println("Hash of sign: " + strings.ToUpper(fmt.Sprintf("%x", sha1.Sum(signer.Raw))))
 
-	mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
+	//mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
 
-	bmeta := data[4 : mlen+4] //получаю байты метаданных
-
+	//bmeta := data[4 : mlen+4] //получаю байты метаданных
+	buf, mlen, err := ReadMeta(data)
 	dzip := data[mlen+4:] // считываю остальную часть архива с файлами
 
-	m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
+	/*m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
 	if err != nil {
 		log.Printf("Can not open meta")
 		return err
@@ -410,7 +411,7 @@ func Extract() error {
 	if err != nil {
 		log.Printf(err.Error())
 		return err
-	}
+	}*/
 
 	xmlMeta := new(meta)
 
@@ -482,4 +483,30 @@ func Extract() error {
 		}
 	}
 	return nil
+}
+
+func ReadMeta(data []byte) (*bytes.Buffer, uint32, error) {
+	mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
+	bmeta := data[4 : mlen+4]                    //получаю байты метаданных
+
+	m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
+	if err != nil {
+		log.Printf("Can not open meta")
+		return nil, mlen, err
+	}
+
+	f := m.File[0] //т.к. в архиве меты всего 1 файл, получаю его
+	buf := new(bytes.Buffer)
+
+	st, err := f.Open()
+	if err != nil {
+		log.Printf(err.Error())
+		return nil, mlen, err
+	}
+	_, err = io.Copy(buf, st)
+	if err != nil {
+		log.Printf(err.Error())
+		return nil, mlen, err
+	}
+	return buf, mlen, nil
 }
