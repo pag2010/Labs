@@ -74,6 +74,10 @@ func main() {
 		ZipWriter := zip.NewWriter(newZipFile) //создается записыватель в zip
 
 		err := ZipFiles(Path, ZipWriter, "")
+		if err != nil {
+			log.Printf(err.Error())
+			return
+		}
 		err = ZipWriter.Close()
 		if err != nil {
 			log.Printf(err.Error())
@@ -94,6 +98,10 @@ func main() {
 			}
 		}
 		ZipMetaFile, err := CreateMeta(List, newZipFile)
+		if err != nil {
+			log.Printf(err.Error())
+			return
+		}
 
 		EndZip := new(bytes.Buffer)
 		bs := make([]byte, 4)
@@ -133,29 +141,7 @@ func main() {
 			}
 		}
 		data := sign.Content
-		/*mlen := binary.LittleEndian.Uint32(data[:4]) //получаю длину метаданных
 
-		bmeta := data[4 : mlen+4] //получаю байты метаданных
-
-		m, err := zip.NewReader(bytes.NewReader(bmeta), int64(len(bmeta)))
-		if err != nil {
-			log.Printf("Can not open meta")
-			return
-		}
-
-		f := m.File[0] //т.к. в архиве меты всего 1 файл, получаю его
-		buf := new(bytes.Buffer)
-
-		st, err := f.Open()
-		if err != nil {
-			log.Printf(err.Error())
-			return
-		}
-		_, err = io.Copy(buf, st)
-		if err != nil {
-			log.Printf(err.Error())
-			return
-		}*/
 		buf, mlen, err := ReadMeta(data)
 		mlen = mlen
 		fmt.Printf(string(buf.Bytes()))
